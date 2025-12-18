@@ -25,7 +25,7 @@ python run.py --dataset sine --method gd --m 1000 --d 1 --iters 300 --seed 0 --d
 
 Available `--dataset` values: `sine`, `ill_cond`.
 
-Available `--method` values: `gd`, `pgd_diag_gn`, `lbfgs`, `pgd_lbfgs_precond`, `gn_cg`, `lbfgs_d`.
+Available `--method` values: `gd`, `pgd_diag_gn`, `lbfgs`, `lbfgs_d`.
 
 The training script writes CSV logs named like:
 
