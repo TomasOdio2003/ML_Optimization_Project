@@ -16,20 +16,6 @@ def armijo_backtracking(theta, f, g, p, obj_fn, alpha0=1.0, c=1e-4, tau=0.5, max
         alpha *= tau
     return alpha
 
-# def armijo_backtracking_count(theta, f, g, p, obj_fn, alpha0=1.0, c=1e-4, tau=0.5, max_ls=30):
-#     """
-#     Same as armijo_backtracking, but returns (alpha, nfev) where nfev = number of obj_fn evaluations.
-#     """
-#     gTp = float(torch.dot(g, p))
-#     alpha = alpha0
-#     nfev = 0
-#     for _ in range(max_ls):
-#         f_new, _ = obj_fn(theta + alpha * p)
-#         nfev += 1
-#         if float(f_new) <= float(f) + c * alpha * gTp:
-#             return alpha, nfev
-#         alpha *= tau
-#     return alpha, nfev
 
 def armijo_backtracking_count(theta, f, g, p, obj_fn, alpha0=1.0, c=1e-4, tau=0.5, max_ls=30):
     gTp = float(torch.dot(g, p))
@@ -312,11 +298,10 @@ def _two_loop_recursion(g: torch.Tensor, state: LBFGSState) -> torch.Tensor:
         alpha.append(a)
         q = q - a * y
 
-    # H0 application
     if state.H0_diag is not None:
-        r = state.H0_diag * q          # H0 = diag(H0_diag)
+        r = state.H0_diag * q          
     else:
-        r = state.gamma * q            # standard L-BFGS: H0 = gamma I
+        r = state.gamma * q            
 
     for (s, y, rho), a in zip(zip(state.s_list, state.y_list, state.rho_list), reversed(alpha)):
         b = rho * float(torch.dot(y, r))
@@ -380,7 +365,6 @@ def lbfgs_minimize(
         ys = float(torch.dot(y, s))
         yy = float(torch.dot(y, y))
 
-        # Update memory only if curvature condition holds
         if ys > 1e-12 and yy > 1e-12:
             rho = 1.0 / ys
             state.s_list.append(s)
@@ -392,7 +376,6 @@ def lbfgs_minimize(
                 state.y_list.pop(0)
                 state.rho_list.pop(0)
 
-            # Common scaling: gamma = (s^T y) / (y^T y)
             state.gamma = ys / yy
 
         theta, f, g = theta_new, f_new.detach(), g_new.detach()
@@ -454,7 +437,7 @@ def lbfgs_d_minimize(
     for k in range(1, max_iters + 1):
         # p = -H_k g
         if len(state.s_list) == 0:
-            p = -(state.H0_diag * g)  # diagonal H0 used before we have history
+            p = -(state.H0_diag * g) 
         else:
             p = -_two_loop_recursion(g, state)
         
@@ -508,9 +491,6 @@ def lbfgs_d_minimize(
             state.H0_diag = v_diag
 
 
-            # keep gamma updated (not used when H0_diag is set, but harmless)
-            state.gamma = ys / yy
-
         theta, f, g = theta_new, f_new.detach(), g_new.detach()
 
         if callback:
@@ -533,158 +513,4 @@ def lbfgs_d_minimize(
 
 
 
-def cg_solve(
-    A_mv: Callable[[torch.Tensor], torch.Tensor],
-    b: torch.Tensor,
-    M_inv: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-    x0: Optional[torch.Tensor] = None,
-    tol: float = 1e-6,
-    max_iters: int = 200,
-) -> Tuple[torch.Tensor, int, float]:
-    """
-    (Preconditioned) Conjugate Gradient for SPD A:
-      solve A x = b using only matvec A_mv(v) and optional preconditioner M_inv(v).
-    Returns (x, iters_used, final_residual_norm).
-    """
-    x = torch.zeros_like(b) if x0 is None else x0.clone()
-    r = b - A_mv(x)
-    bnorm = float(torch.linalg.norm(b)) + 1e-12
 
-    if M_inv is None:
-        z = r
-    else:
-        z = M_inv(r)
-
-    p = z.clone()
-    rz_old = float(torch.dot(r, z))
-
-    rnorm = float(torch.linalg.norm(r))
-    if rnorm <= tol * bnorm:
-        return x, 0, rnorm
-
-    for k in range(1, max_iters + 1):
-        Ap = A_mv(p)
-        denom = float(torch.dot(p, Ap)) + 1e-30
-        alpha = rz_old / denom
-
-        x = x + alpha * p
-        r = r - alpha * Ap
-
-        rnorm = float(torch.linalg.norm(r))
-        if rnorm <= tol * bnorm:
-            return x, k, rnorm
-
-        if M_inv is None:
-            z = r
-        else:
-            z = M_inv(r)
-
-        rz_new = float(torch.dot(r, z))
-        beta = rz_new / (rz_old + 1e-30)
-
-        p = z + beta * p
-        rz_old = rz_new
-
-    return x, max_iters, rnorm
-
-
-def _compute_r_J(model, template, theta_vec: torch.Tensor, X: torch.Tensor, y: torch.Tensor):
-    def r_of_v(v: torch.Tensor):
-        return residuals_from_theta_vec(model, template, v, X, y)
-
-    theta_req = theta_vec.detach().requires_grad_(True)
-    r = r_of_v(theta_req).detach()
-    J = torch.autograd.functional.jacobian(r_of_v, theta_req, create_graph=False).detach()  # (m, n)
-    return r, J
-
-
-def gauss_newton_cg(
-    theta0: torch.Tensor,
-    model,
-    template,
-    X: torch.Tensor,
-    y: torch.Tensor,
-    gn_damping: float = 1e-3,
-    max_outer_iters: int = 50,
-    tol_grad: float = 1e-6,
-    cg_tol: float = 1e-6,
-    cg_max_iters: int = 200,
-    precond=None,  # object with refresh(theta_vec, **kwargs) and apply_inv(v)
-    use_line_search: bool = True,
-    alpha0: float = 1.0,
-    callback=None,
-):
-    """
-    Outer loop: Gauss–Newton on F(theta)=0.5||r(theta)||^2
-      Solve (J^T J + gn_damping I) p = -J^T r using (P)CG
-      theta <- theta + alpha * p
-    """
-    theta = theta0.clone().detach()
-
-    for k in range(max_outer_iters):
-        r, J = _compute_r_J(model, template, theta, X, y)
-        loss = 0.5 * (r @ r)
-        g = J.t() @ r  # exact gradient for least squares
-
-        gnorm = float(torch.linalg.norm(g))
-        if callback:
-            callback(k, theta, loss, g, alpha=None, cg_iters=None, cg_rnorm=None)
-
-        if gnorm <= tol_grad:
-            break
-
-        # Define A(v) = (J^T J + λI)v
-        def A_mv(v: torch.Tensor) -> torch.Tensor:
-            return J.t().matmul(J.matmul(v)) + gn_damping * v
-
-        b = -g
-
-        # Refresh preconditioner using the current iterate (and J if it can reuse it)
-        M_inv = None
-        if precond is not None:
-            try:
-                precond.refresh(theta, J=J)  # DiagGNPreconditioner can reuse J
-            except TypeError:
-                precond.refresh(theta)
-
-            M_inv = precond.apply_inv
-
-        # Inner solve via CG/PCG
-        p, cg_iters, cg_rnorm = cg_solve(
-            A_mv=A_mv,
-            b=b,
-            M_inv=M_inv,
-            x0=None,
-            tol=cg_tol,
-            max_iters=cg_max_iters,
-        )
-
-        # Line search along GN direction (optional but safer)
-        if use_line_search:
-            def obj_fn(tvec: torch.Tensor):
-                rr = residuals_from_theta_vec(model, template, tvec, X, y)
-                f = 0.5 * (rr @ rr)
-                # gradient only needed at current theta for Armijo RHS; so return dummy g here
-                return f, None
-
-            # Armijo uses g^T p at current theta; we already have g
-            alpha = 1.0
-            c = 1e-4
-            tau = 0.5
-            gTp = float(torch.dot(g, p))
-            f0 = float(loss)
-
-            for _ in range(30):
-                f_new, _ = obj_fn(theta + alpha * p)
-                if float(f_new) <= f0 + c * alpha * gTp:
-                    break
-                alpha *= tau
-        else:
-            alpha = alpha0
-
-        theta = theta + alpha * p
-
-        if callback:
-            callback(k, theta, loss, g, alpha=alpha, cg_iters=cg_iters, cg_rnorm=cg_rnorm)
-
-    return theta
