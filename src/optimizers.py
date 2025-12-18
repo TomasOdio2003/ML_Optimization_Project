@@ -6,7 +6,6 @@ from typing import Callable, Tuple, Optional
 from .functional import residuals_from_theta_vec
 
 def armijo_backtracking(theta, f, g, p, obj_fn, alpha0=1.0, c=1e-4, tau=0.5, max_ls=30):
-    # Armijo: f(theta + a p) <= f + c a g^T p
     gTp = float(torch.dot(g, p))
     alpha = alpha0
     for _ in range(max_ls):
@@ -23,7 +22,6 @@ def armijo_backtracking_count(theta, f, g, p, obj_fn, alpha0=1.0, c=1e-4, tau=0.
     nfev = 0
 
     f0 = float(f)
-    # numerical tolerance to avoid "can't see decrease" stalls
     tol = 1e-12 * (abs(f0) + 1.0)
 
     for _ in range(max_ls):
@@ -78,10 +76,7 @@ def strong_wolfe_line_search(
 ):
     """
     Strong Wolfe line search (Nocedal–Wright style).
-    Returns (alpha, nfev) where nfev counts obj_fn evaluations.
-      Wolfe:
-        f(x+a p) <= f(x) + c1 a g^T p
-        |g(x+a p)^T p| <= c2 |g^T p|
+
     """
     phi0 = float(f0)
     derphi0 = float(torch.dot(g0, p))
@@ -158,10 +153,8 @@ def preconditioned_gd(theta0, obj_fn, precond, max_iters, tol_grad, alpha0=1.0, 
         if gnorm <= tol_grad:
             break
 
-        # Proposed preconditioned direction
         p = -precond.apply_inv(g)
 
-        # (A) Ensure descent direction; otherwise fall back to steepest descent
         gTp = float(torch.dot(g, p))
         if (gTp >= 0.0) or (not torch.isfinite(torch.tensor(gTp))):
             p = -g
@@ -170,14 +163,12 @@ def preconditioned_gd(theta0, obj_fn, precond, max_iters, tol_grad, alpha0=1.0, 
         # Line search
         alpha, ls_evals = armijo_backtracking_count(theta, f, g, p, obj_fn, alpha0=alpha0) if use_line_search else (alpha0, 0)
 
-        # (B) If line search collapses, recover with steepest descent once
         if alpha < 1e-12:
             p = -g
             alpha, ls_evals = armijo_backtracking_count(theta, f, g, p, obj_fn, alpha0=alpha0) if use_line_search else (alpha0, 0)
 
         theta = (theta + alpha * p).detach()
 
-        # Correct logging: log f/g at the new theta
         if callback:
             f_new, g_new = obj_fn(theta)
             callback(k, theta, f_new, g_new, alpha=alpha, ls_evals=ls_evals, gTp=gTp, p_norm=float(torch.linalg.norm(p)))
@@ -190,21 +181,16 @@ def inv_diag_bfgs_update_16(v_diag: torch.Tensor, s: torch.Tensor, y: torch.Tens
     """
     Diagonal inverse quasi-Newton update (paper eq. (16)):
 
-      v_{k+1,i} =
-        (1 - (y_i s_i)/(y^T s))^2 * v_{k,i}
-        + (2 - (s_i y_i)/(y^T s)) * (s_i^2)/(y^T s)
-
-    where v_diag approximates diag( (∇^2 f)^{-1} ).
     """
     ys = torch.dot(y, s)
     if float(ys) <= 1e-12:
-        # Curvature condition failed; keep v as-is
+       
         return v_diag
 
     t = (s * y) / ys  # elementwise (s_i y_i)/(y^T s)
     v_new = (1.0 - t) ** 2 * v_diag + (2.0 - t) * (s * s) / ys
 
-    # Keep strictly positive for stability
+    # we want to keep it strictly positive so we damp
     v_new = torch.clamp(v_new, min=damping)
     return v_new
 
@@ -212,10 +198,8 @@ def inv_diag_bfgs_update_16(v_diag: torch.Tensor, s: torch.Tensor, y: torch.Tens
 
 def damp_curvature_pair_y(s: torch.Tensor, y: torch.Tensor, delta: float = 1e-4) -> torch.Tensor:
     """
-    Ensure a minimum curvature: y^T s >= delta * ||s||^2
-    by replacing y with y + lambda*s when needed.
+    damping for curvature pairs 
 
-    This is a simple curvature damping / regularization that helps in nonconvex/noisy settings.
     """
     ys = float(torch.dot(y, s))
     sTs = float(torch.dot(s, s)) + 1e-30  # avoid divide-by-zero
@@ -240,25 +224,14 @@ def inv_diag_bfgs_update_25(
     v_diag: torch.Tensor,
     s: torch.Tensor,
     y: torch.Tensor,
-    gnorm_xk: float,          # ||∇f(x_k)|| at the OLD iterate
+    gnorm_xk: float,          # ||∇f(x_k)|| at the OLD iterate 
     eps: float = 0.2,         # ε in (0,1)
     xi: float = 100.0,        # φ(t)=xi*t^alpha  (bigger xi => smaller φ^{-1})
     alpha: float = 1.0,
     damping: float = 1e-8,
 ) -> torch.Tensor:
     """
-    Paper eq. (25):
-      let t_i = (y_i s_i)/(y^T s), threshold = eps * min(1, ||∇f(x_k)||)
-
-      if t_i < threshold:
-         (V_{k+1})_i = (V_k)_i
-      else:
-         (V_{k+1})_i =
-            (1 - t_i)^2 (V_k)_i
-            + max(0, 2 - t_i) * (s_i^2)/(y^T s)
-            + φ^{-1}(||∇f(x_k)||)
-
-    Requires y^T s > 0; otherwise returns v_diag unchanged.
+    This is equation (25) from the paper.
     """
     ys = torch.dot(y, s)
     if float(ys) <= 1e-12 or (not torch.isfinite(ys)):
@@ -286,7 +259,6 @@ class LBFGSState:
     rho_list: List[float]
     gamma: float
     m_hist: int
-    # New: diagonal initial inverse-Hessian approx for L-BFGS-D
     H0_diag: Optional[torch.Tensor] = None  # shape (n,)
 
 def _two_loop_recursion(g: torch.Tensor, state: LBFGSState) -> torch.Tensor:
@@ -413,8 +385,8 @@ def lbfgs_d_minimize(
     phi_alpha: float = 1.0,       # α
 ) -> Tuple[torch.Tensor, LBFGSState]:
     """
-    Diagonal L-BFGS (L-BFGS-D): same two-loop recursion, but H0_k is diagonal
-    and updated using eq. (16). That diagonal is used as the initial matrix in the recursion.
+    Diagonal L-BFGS (L-BFGS-D): same two-loop recursion but H0_k is diagonal
+    and updated using eq. (16). 
     """
     theta = theta0.clone().detach()
     f, g = obj_fn(theta)
