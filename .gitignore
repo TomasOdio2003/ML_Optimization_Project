@@ -1,0 +1,66 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Installer / packaging
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Mypy / caches
+.mypy_cache/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs, models, pickles, and other heavy artifacts
+*.pt
+*.pth
+*.pkl
+*.log
+
+# Project outputs / large data (do not track)
+figures/
+figures_backup/
+results/
+results_backup_200/
+gn_cg/
+
+# Environment files
+.env
+.env.*
+
+# Local runtime files
+*.pid
+*.seed

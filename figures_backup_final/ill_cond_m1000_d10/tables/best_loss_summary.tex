@@ -1,0 +1,10 @@
+\begin{tabular}{lrrlrrrlrrrlrrrlrr}
+\toprule
+method & n & best_loss_median & best_loss_iqr & best_loss_mean & best_loss_std & iter_at_best_median & iter_at_best_iqr & iter_at_best_mean & iter_at_best_std & time_at_best_median & time_at_best_iqr & time_at_best_mean & time_at_best_std & work_at_best_median & work_at_best_iqr & work_at_best_mean & work_at_best_std \\
+\midrule
+D-LBFGS & 10 & 5.87 & [3.104, 10.9] & 6.699 & 4.616 & 301 & [218.2, 352.2] & 292.2 & 83.93 & 1.261 & [1.184, 1.962] & 1.517 & 0.5232 & 1554 & [1458, 2423] & 1882 & 676.7 \\
+GD & 10 & 8.479 & [5.04, 12.6] & 8.763 & 4.101 & 399 & [399, 399] & 399 & 0 & 3.974 & [3.953, 4.225] & 4.108 & 0.2708 & 5492 & [5440, 5866] & 5690 & 406.1 \\
+L-BFGS & 10 & 5.869 & [3.105, 10.9] & 6.7 & 4.617 & 400 & [400, 400] & 399.4 & 1.897 & 0.7811 & [0.77, 0.7934] & 0.7799 & 0.01858 & 877.5 & [868.8, 887.8] & 879.8 & 16.98 \\
+PGD (Diag GN precond) & 10 & 12.89 & [6.818, 30.06] & 23.34 & 26.66 & 399 & [399, 399] & 399 & 0 & 12.86 & [12.76, 12.93] & 12.95 & 0.372 & 881 & [868.2, 1038] & 1083 & 499.7 \\
+\bottomrule
+\end{tabular}

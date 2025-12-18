@@ -1,0 +1,10 @@
+\begin{tabular}{lrrlrrrlrrrlrr}
+\toprule
+method & n & auc_log10_loss_iter_median & auc_log10_loss_iter_iqr & auc_log10_loss_iter_mean & auc_log10_loss_iter_std & auc_loss_log_vs_elapsed_sec_median & auc_loss_log_vs_elapsed_sec_iqr & auc_loss_log_vs_elapsed_sec_mean & auc_loss_log_vs_elapsed_sec_std & auc_loss_log_vs_cum_evals_median & auc_loss_log_vs_cum_evals_iqr & auc_loss_log_vs_cum_evals_mean & auc_loss_log_vs_cum_evals_std \\
+\midrule
+D-LBFGS & 10 & 317.3 & [199.6, 418.9] & 289.8 & 153 & 1.726 & [1.097, 2.219] & 1.581 & 0.7705 & 2114 & [1333, 2735] & 1933 & 964 \\
+GD & 10 & 399.9 & [359.6, 459.3] & 396.6 & 76.52 & 4.035 & [3.597, 4.544] & 3.949 & 0.7397 & 5497 & [4903, 6223] & 5398 & 1022 \\
+L-BFGS & 10 & 318.9 & [204.7, 421.7] & 294.8 & 147.3 & 0.6393 & [0.4319, 0.8245] & 0.5983 & 0.269 & 710.7 & [466.8, 927.3] & 660 & 312.1 \\
+PGD (Diag GN precond) & 10 & 486.2 & [355.6, 609] & 491.1 & 166.9 & 15.63 & [11.6, 19.49] & 15.82 & 5.196 & 1091 & [840.6, 1313] & 1088 & 334.3 \\
+\bottomrule
+\end{tabular}
